@@ -1,0 +1,18 @@
+# Dependencies & build outputs
+node_modules
+.git
+.agents
+.gemini
+dist
+
+# Environment local files
+.env.local
+.env.*.local
+*.log
+
+# Documentation & large models
+docs/
+scratch/
+liveness-service/
+mediapipe/
+docker-compose*.yml

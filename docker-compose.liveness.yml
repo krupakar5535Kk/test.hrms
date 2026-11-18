@@ -1,0 +1,31 @@
+services:
+  hrms-liveness:
+    build:
+      context: ./liveness-service
+      dockerfile: Dockerfile
+    container_name: hrms-liveness
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8100:8100"
+    networks:
+      - default
+      - hrms-biometrics-net
+    environment:
+      LIVENESS_API_KEY: "${LIVENESS_API_KEY}"
+      LIVENESS_PASSIVE_THRESHOLD: "${LIVENESS_PASSIVE_THRESHOLD:-0.62}"
+      OMP_NUM_THREADS: "${LIVENESS_OMP_THREADS:-2}"
+      LOG_LEVEL: "${LIVENESS_LOG_LEVEL:-INFO}"
+    mem_limit: 1024m
+    cpus: "2.0"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8100/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+networks:
+  hrms-biometrics-net:
+    name: hrms-biometrics-net
+    external: true
+

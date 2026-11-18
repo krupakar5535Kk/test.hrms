@@ -1,0 +1,35 @@
+{
+  "name": "hrms-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "HRMS + Smart Attendance + Working-Hour Payroll SaaS Monorepo",
+  "workspaces": [
+    "shared",
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=server & npm run dev --workspace=client",
+    "dev:server": "npm run dev --workspace=server",
+    "dev:client": "npm run dev --workspace=client",
+    "build": "npm run build --workspace=shared && npm run build --workspace=server && npm run build --workspace=client",
+    "build:shared": "npm run build --workspace=shared",
+    "build:server": "npm run build --workspace=server",
+    "build:client": "npm run build --workspace=client",
+    "typecheck": "npm run typecheck --workspace=shared && npm run typecheck --workspace=server && npm run typecheck --workspace=client",
+    "test": "npm run test --workspace=shared && npm run test --workspace=server && npm run test --workspace=client",
+    "test:shared": "npm run test --workspace=shared",
+    "test:server": "npm run test --workspace=server",
+    "test:client": "npm run test --workspace=client",
+    "lint": "npm run lint --workspaces --if-present",
+    "start": "npm run start --workspace=server"
+  },
+  "engines": {
+    "node": "22.x",
+    "npm": ">=10.0.0"
+  },
+  "devDependencies": {
+    "prettier": "^3.4.2"
+  }
+}
