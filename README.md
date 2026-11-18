@@ -1,197 +1,173 @@
-# HRMS + Smart Attendance + Working-Hour Payroll SaaS
+# KMACCS HRMS — Smart Attendance, Biometrics & Working-Hour Payroll System
 
-An enterprise-grade, multi-tenant Human Resource Management System engineered with strict proportional working-hour payroll, GPS geofencing, selfie liveness verification, single daily attendance session enforcement, and tri-partite login security.
-
----
-
-## 1. Architectural Highlights
-
-- **Proportional Working-Hour Model & Monetary Precision:** Salary is proportional to approved payable working hours based on calendar-day monthly distribution ($D_{\text{month}} \times 8.0\text{ hours}$). Zero arbitrary half-day deductions and zero monetary late-arrival fines. Monetary amounts (`base_monthly_salary`, `earned_salary`, `allowances`, `deductions`, `net_salary`) maintain exact 64-bit integer paise (`BIGINT`) precision. Derived rates (`daily_rate`, `hourly_rate`, `minute_rate`) may be stored as `NUMERIC(14,6)` for fractional display, but authoritative calculation evaluates exact rational numerator/denominator arithmetic: $\text{segment\_earnings\_paise} = \frac{\text{payable\_minutes} \times \text{salary\_reference\_paise}}{\text{calendar\_days} \times 480}$, summed unrounded and rounded once to integer paise. Calendar days are strictly validated against the actual payroll period without static 30-day defaults. Mandatory whole-rupee net rounding has been removed and registered as open decision `DEC-05` (Net Salary Rounding Rule).
-- **DEC-01 Amended Paid Lunch Policy:** Confirmed 1:00 PM – 2:00 PM lunch window is **PAID**. Contributes 60 payable minutes on scheduled working days (Daily Payable Hours = Approved Actual Working Hours + 1 Paid Lunch Hour). Lunch is **not deducted** from salary. Full day yields exactly 8.0 payable hours (480 minutes). Zero lunch credit on full-day absence is cataloged as a proposed engineering design default under `UNASSIGNED-PO-ABSENCE-LUNCH` (pending formal PO confirmation); partial-day qualification rules are cataloged under open decision `UNASSIGNED-PO-LUNCH-ELIGIBILITY`.
-- **Paid Sundays & Public Holidays:** Sundays and recognized public holidays automatically receive an **8.0-hour paid credit (480 minutes)** in the monthly calculation. Overlap between Sunday and public holiday credits exactly 8.0 hours.
-- **DEC-15 Approved Option A Proration:** Mid-period salary changes apply the salary reference effective on each specific calendar date based on the month's calendar-day divisor. Continuous salary segments are evaluated at full internal precision, summed unrounded across all segments, and rounded once to the nearest integer paisa: $\text{Gross Paise} = \text{ROUND\_HALF\_UP}\left(\sum \text{unrounded\_segment\_earnings\_paise}\right)$.
-- **Critical Technical Blocker (`BLOCKER-ACTUAL-WORK-MEASUREMENT`):** A single check-in/check-out pair captures elapsed attendance, not active productive work. Productive working time is not currently measurable under baseline punches. Equating presence with work or assuming computer inactivity is non-work is technically invalid. Illustrative measurement alternatives (active task logging, desktop monitoring, supervisor timesheet approval) represent possible approaches requiring separate evaluation and explicit approval; no surveillance or monitoring method is selected or recommended as an approved architecture. Implementation of automated deductions is blocked pending architectural design.
-- **DEC-02 Approved Daily Session Lifecycle:** Enforces a strict maximum of one Check-In and one Check-Out pair per employee per scheduled working day ($\le 1$). Absence and approved leave remain valid business states. Includes Admin dual-workflow corrections and deterministic check-out order.
-- **DEC-13 Approved Login Architecture:** Tri-partite login identifier requiring **Organization Code + Phone Number + Password**. The Organization Code resolves the tenant internally before credential verification; client-supplied organization UUIDs are strictly untrusted.
-- **DEC-09 Approved Supabase Auth Broker:** Supabase Auth is single password authority; Express translates credentials to synthetic email identities.
-- **DEC-14 Approved Biometric Lifecycle:** Strict 30-day maximum ceiling on daily attendance selfies with 4-tier deletion coverage, subject to legal review before production. Retention-clock starting point (device capture time vs. trusted server receipt time) is an unresolved policy and architectural clarification.
+Human Resource Management System built for **Karthikeya Mutually Aided Cooperative Credit Society Limited (KMACCS)** featuring live selfie-based attendance with anti-spoofing liveness checks, strict 50-metre office geofencing, Admin verification workflows, field-force monitoring, and a deterministic working-hour payroll engine.
 
 ---
 
-## 2. Monorepo Structure
+## Live Deployment (Vercel)
+
+| Environment | URL | Status |
+| :--- | :--- | :--- |
+| **Primary Production Portal** | **[https://kmaccs-hrms-portal.vercel.app](https://kmaccs-hrms-portal.vercel.app)** | Live on Vercel |
+| **Secondary Alias** | **[https://kmaccs-hrms.vercel.app](https://kmaccs-hrms.vercel.app)** | Live on Vercel |
+| **API Health Endpoint** | **[https://kmaccs-hrms-portal.vercel.app/api/v1/health](https://kmaccs-hrms-portal.vercel.app/api/v1/health)** | Active (`200 OK`) |
+
+---
+
+## Technology Stack
+
+### Frontend (`client/`)
+| Technology | Purpose |
+| :--- | :--- |
+| **React 18** (`react`, `react-dom`) | Component-based UI for Admin Console & Employee Portal |
+| **TypeScript 5.7** | Strict end-to-end static type safety |
+| **Vite 6** | Fast development server & optimized production bundling |
+| **Tailwind CSS 3.4** (`clsx`, `tailwind-merge`) | Enterprise utility-first styling and custom design tokens |
+| **React Router v6** | Role-isolated protected routing (Admin vs. Employee portals) |
+| **Recharts** | Interactive analytics and reporting visualizations |
+| **Lucide React** | Crisp icon library across navigation, status badges, and modals |
+| **MediaPipe Tasks Vision** (`@mediapipe/tasks-vision`) | Browser-side live selfie capture & facial liveness detection |
+
+### Backend (`server/` & `api/`)
+| Technology | Purpose |
+| :--- | :--- |
+| **Node.js 22.x** | Serverless & server runtime environment |
+| **Express.js 4.21** | REST API server, middleware pipeline & Authentication Broker |
+| **TypeScript 5.7** | Strongly typed routes, services, and database mappers |
+| **PostgreSQL (`pg` 8.x)** | Direct pooled Postgres queries with transaction-scoped RLS context |
+| **Supabase JS (`@supabase/supabase-js`)** | Supabase Auth (GoTrue) integration & private storage signed URLs |
+| **JOSE (`jose` 6.x)** | Cryptographic JWT & JWKS signature verification |
+| **Helmet 8, CORS, Cookie & Rate Limiter** | HTTP security headers, dynamic CORS whitelist, `HttpOnly` refresh cookies & brute-force protection |
+| **Vercel Serverless Adapter (`api/index.ts`)** | Serverless entrypoint bridging Vercel Functions to the Express app |
+
+### Database, Authentication & Cloud Storage (`supabase/`)
+| Technology | Purpose |
+| :--- | :--- |
+| **Supabase PostgreSQL (Cloud `ap-south-1`)** | Multi-tenant relational database with strict Row-Level Security (RLS) |
+| **Supabase Auth (GoTrue) + Auth Broker** | Tri-partite login (`Organization Code + Indian Mobile + Password`) with synthetic auth identities |
+| **Supabase Private Storage** | Encrypted private buckets (`attendance-selfies`, `face-enrollment`) with 30-day selfie retention & short-lived signed URLs |
+| **SQL Migrations (`supabase/migrations/`)** | 14 versioned DDL migrations, stored procedures, and security policies |
+
+### Biometrics & Anti-Spoofing Microservice (`liveness-service/`)
+| Technology | Purpose |
+| :--- | :--- |
+| **Python + FastAPI 0.115 + Uvicorn** | High-performance anti-spoofing & liveness verification API |
+| **ONNX Runtime + OpenCV + MediaPipe** | Passive spoof detection, print/replay defense & challenge-response verification |
+| **Docker Compose** | Containerized deployment configuration (`docker-compose.liveness.yml`) |
+
+### Shared Contracts & Deployment
+| Technology | Purpose |
+| :--- | :--- |
+| **npm Workspaces (`@hrms/shared`)** | Shared TypeScript interfaces, API contracts, and validation schemas across frontend & backend |
+| **Vercel** | Production hosting for React SPA static CDN + Express Serverless API (`vercel.json`) |
+
+---
+
+## Core Modules & Features
+
+### Admin Console (10 Modules)
+1. **Organization Overview** — Executive Command & Governance Center
+2. **Employee Management** — Employee Directory, onboarding & activation workflows
+3. **Sales & Recovery Teams** — Departments, designations & organizational structure
+4. **Attendance & Approvals** — Selfie attendance verification queue with side-by-side reference vs. live selfie comparison, 50m geofence radar map, idempotent approval/rejection, and audit trail
+5. **Field-Force Monitoring** — Live field-duty sessions & customer/recovery visit tracking
+6. **Leave Approvals** — CL / SL / PL / LWP adjudication with audit remarks
+7. **Payroll Management** — Deterministic working-hour payroll engine (64-bit integer paise precision)
+8. **Reports & Exports** — Operational attendance & payroll reporting
+9. **Settings, Geofence & Audit** — HQ geofence coordinates (`50m` perimeter, `≤ 30m` GPS accuracy) & immutable audit logs
+10. **Security & Sessions** — Admin security, biometric governance & multi-device session revocation
+
+### Employee Self-Service Portal
+- **Smart Selfie Attendance** — Automatic capture of live selfie, GPS coordinates, GPS accuracy (`≤ 30m`), server-verified Haversine distance from HQ (`≤ 50m`), IST date/time, and instant `PENDING_ADMIN_REVIEW` queuing (no manual tampering or auto-approval).
+- **Attendance History, Field Duty Logs, Leave Requests, Payroll Slips, Profile & Security Controls**.
+
+### Architectural Governance Rules
+- **Location Verification:** Strict **50-metre** office geofence and **≤ 30-metre** GPS accuracy verified server-side; face verification and location verification are enforced independently (a face match never overrides a failed location check).
+- **Admin Approval Guardrails:** Outside-geofence submissions are recorded for audit transparency, and approval is strictly blocked by both UI and backend validation.
+- **Working-Hour Payroll Precision:** Exact proportional working-hour calculation with `BIGINT` paise arithmetic and DEC-01 paid lunch & holiday credit rules.
+- **Role & Tenant Isolation:** Dedicated Admin and Employee routes (`403 Forbidden` across role boundaries), zero client-supplied tenant UUIDs, and `HttpOnly` refresh cookies with in-memory access tokens.
+
+---
+
+## Monorepo Structure
 
 ```text
 .
-├── .env.example              # Environment variables template (placeholders only)
-├── .gitignore                # Git ignore configuration
-├── .nvmrc                    # Node.js target version (26)
-├── .prettierrc               # Prettier code formatting rules
-├── package.json              # Monorepo root npm workspaces configuration
-├── tsconfig.base.json        # Base TypeScript strict compiler options
-│
-├── client/                   # Frontend Workspace (React + Vite + TypeScript + Tailwind)
-│   ├── index.html            # Vite entrypoint HTML
-│   ├── package.json          # Frontend dependencies and build scripts
-│   ├── postcss.config.js     # PostCSS configuration
-│   ├── tailwind.config.js    # Tailwind CSS config with shadcn/ui design tokens
-│   ├── tsconfig.json         # Client TypeScript configuration
-│   ├── vite.config.ts        # Vite build tool and API proxy configuration
+├── api/                         # Vercel Serverless Express entrypoint (api/index.ts)
+├── client/                      # Frontend Workspace (React 18 + Vite + TypeScript + Tailwind)
+│   ├── public/                  # Static assets & KMACCS brand intro video
 │   └── src/
-│       ├── main.tsx          # React application root
-│       ├── App.tsx           # Router configuration and global ErrorBoundary
-│       ├── index.css         # Tailwind directives and CSS variables
-│       ├── components/
-│       │   ├── common/       # ErrorBoundary, LoadingSpinner, NotFound
-│       │   └── layout/       # AppShell responsive layout
-│       └── pages/            # HomePage (Status Dashboard), LoginPage (DEC-13)
-│
-├── server/                   # Backend Workspace (Node.js + Express + TypeScript)
-│   ├── .env.example          # Server environment template
-│   ├── package.json          # Backend dependencies and runtime scripts
-│   ├── tsconfig.json         # Server TypeScript configuration
-│   ├── tests/                # Server unit and integration tests
-│   └── src/
-│       ├── app.ts            # Express app configuration & middleware
-│       ├── index.ts          # Server listener and graceful shutdown handlers
-│       ├── config/           # Environment validation (env.ts)
-│       ├── middleware/       # errorHandler.ts, requestValidator.ts
-│       ├── routes/v1/        # API v1 routes: health.ts, auth.ts
-│       └── utils/            # Structured logger (logger.ts)
-│
-├── shared/                   # Shared Workspace (@hrms/shared)
-│   ├── package.json          # Shared package specification
-│   ├── tsconfig.json         # Shared TypeScript composite configuration
-│   └── src/
-│       ├── index.ts          # Barrel export
-│       ├── api/              # Standardized ApiResponse & ApiErrorResponse
-│       ├── auth/             # DEC-13 Login contracts & validation schemas
-│       └── types/            # Core domain interfaces (User, Employee, Org)
-│
-└── docs/                     # Approved Specifications & Baselines
-    ├── PRD_v1.9.md           # Current Amended PRD Baseline with Open Policy Blockers
-    ├── PRD_v1.8.md           # Historical Approved Baseline (DEC-09 Supabase Auth)
-    ├── PRD_v1.7.md           # Historical Approved Baseline (DEC-13 Login Architecture)
-    ├── PRD_v1.6.md           # Historical Approved Baseline (DEC-02 Refinements)
-    ├── PRD_v1.5.md           # Historical Baseline (DEC-02 Initial)
-    ├── PRD_v1.4.md           # Historical Baseline (DEC-01 Lunch Clipping)
-    ├── 01_PRD_GAP_ANALYSIS_AND_RTM.md
-    ├── 02_SOFTWARE_REQUIREMENTS_SPECIFICATION_SRS.md
-    ├── 03_DATABASE_SCHEMA_AND_ERD.md
-    ├── 04_API_SPECIFICATION.md
-    ├── 05_ROLE_PERMISSION_MATRIX.md
-    ├── 06_UI_UX_ARCHITECTURE.md
-    ├── 07_SECURITY_ARCHITECTURE.md
-    └── 08_ROADMAP_AND_TESTING_STRATEGY.md
+│       ├── components/          # UI primitives, BrandIntroScreen, SmartAttendanceModal, AdminReviewModal, GeofenceBoundaryMap
+│       ├── context/             # AuthContext (in-memory access tokens + cookie refresh)
+│       ├── layouts/             # AdminLayout & EmployeeLayout
+│       ├── pages/               # Admin Console (10 pages), Employee Portal, Login & Account Activation
+│       └── tests/               # Frontend domain & liveness capture unit tests
+├── server/                      # Backend Workspace (Node.js + Express + TypeScript)
+│   ├── src/
+│   │   ├── app.ts               # Express app, Helmet, dynamic CORS & route mounting
+│   │   ├── auth/                # Cryptographic JWT / JWKS verifier
+│   │   ├── db/                  # Postgres pool & multi-tenant RLS transaction runner
+│   │   ├── middleware/          # Auth guards, RBAC, rate limiter & error handler
+│   │   ├── routes/v1/           # auth.ts, admin.ts, employee.ts, notifications.ts, health.ts
+│   │   └── services/            # HRMS domain rules, record mappers, Supabase admin, face & liveness adapters
+│   └── tests/                   # Backend unit, security & end-to-end integration tests
+├── shared/                      # Shared TypeScript contracts & schemas (@hrms/shared)
+├── supabase/                    # Supabase config & 14 PostgreSQL RLS/schema migrations
+├── liveness-service/            # Python FastAPI anti-spoofing microservice
+├── scripts/                     # Automated 12-scenario E2E verification & admin scripts
+├── docs/                        # PRD baselines, SRS, ERD, API & Security specifications
+├── vercel.json                  # Vercel build & SPA/API rewrite configuration
+└── package.json                 # Root npm workspaces configuration
 ```
 
 ---
 
-## 3. Environment Prerequisites
+## Local Setup & Running
 
-- **Node.js:** Target Node.js 26 Active LTS (`>=26.0.0`). Check with `node -v`.
-- **npm:** npm 10+ (`>=10.0.0`). Check with `npm -v`.
-- **Operating System:** macOS (Intel `x86_64` or Apple Silicon `arm64`) / Linux / Windows WSL2.
-
-### Local Installation Instructions (if Node.js is missing):
-```bash
-# Option 1: Standalone User-Local Installation (Installed in ~/.local/node without root/sudo)
-# Ensure ~/.local/node/bin is on your PATH in ~/.zshrc and ~/.zprofile:
-export PATH="$HOME/.local/node/bin:$PATH"
-
-# Option 2: Using Homebrew (macOS)
-brew install node
-
-# Option 3: Using nvm (Node Version Manager)
-nvm install 26
-nvm use 26
-```
-
----
-
-## 4. Setup & Running the Application
+### Prerequisites
+- **Node.js** `22.x`+ and **npm** `10+`
+- **Supabase** project (PostgreSQL + Auth + Storage)
 
 ### 1. Install Dependencies
 ```bash
-# From monorepo root
 npm install
 ```
 
 ### 2. Configure Environment Variables
 ```bash
-# Copy root template
-cp .env.example .env
-
-# Copy server template
 cp server/.env.example server/.env
+cp client/.env.example client/.env
 ```
+Fill in your Supabase URL, Postgres pool credentials, JWT/HMAC keys, and CORS settings in `server/.env`. *(Never commit real `.env` files.)*
 
-### 3. Build Shared Library & Workspaces
+### 3. Build All Workspaces
 ```bash
-# Build shared library first, followed by server and client
 npm run build
 ```
 
 ### 4. Run Development Servers
 ```bash
-# Run both backend API (port 5000) and frontend (port 5173) concurrently
+# Run both Backend API (port 5000) and Frontend (port 5173)
 npm run dev
 
-# Or run backend individually
+# Or run individually
 npm run dev:server
-
-# Or run frontend individually
 npm run dev:client
 ```
 
-### 5. Verify the Health Endpoint
+### 5. Run Verification Tests
 ```bash
-curl http://localhost:5000/api/v1/health
-```
-Expected response:
-```json
-{
-  "success": true,
-  "data": {
-    "status": "ok",
-    "service": "hrms-api",
-    "version": "1.0.0",
-    "environment": "development",
-    "timestamp": "2026-11-07T...",
-    "uptimeSeconds": 12,
-    "memory": { "rssMb": 45.2, "heapUsedMb": 18.5 }
-  }
-}
-```
-
-### 6. Test the DEC-13 Login Endpoint (Scaffold Demonstration)
-```bash
-curl -X POST http://localhost:5000/api/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{
-    "organizationCode": "DEMO",
-    "phoneNumber": "9876543210",
-    "password": "Password123!"
-  }'
-```
-
-> [!NOTE]
-> **Scaffold vs. Production Authentication Notice:**
-> The current login handler in `server/src/routes/v1/auth.ts` is explicitly a **Task 1.1 development scaffold fixture**. It validates payload schemas, demonstrates anti-enumeration response codes (401 on non-demo credentials, 400 on validation errors), and returns mock token responses for `DEMO` credentials. **It is NOT production authentication.** Production Supabase Auth integration, cryptographic password hashing, user session issuance, and PostgreSQL database queries will be implemented in **Task 1.2**.
-
-### 7. Run Test & Typecheck Suites
-```bash
-# Run automated tests across all workspaces (shared, server, client)
+# Run unit & typecheck suites across workspaces
 npm test
-
-# Run strict TypeScript compiler verification across all workspaces
 npm run typecheck
+
+# Run 12-scenario attendance & auth end-to-end verification
+node scripts/test-all-12-scenarios.mjs
 ```
 
 ---
 
-## 5. Security & Isolation Safeguards
-
-- **Task 1.1 Mock Authentication Scope:** The demo login route is strictly a development scaffold to verify HTTP request/response contracts and DEC-13 payload validation. It does not replace real authentication.
-- **No Live Database Alterations:** This milestone establishes scaffolding, shared contracts, and application foundations. No migrations or queries have been executed on live Supabase instances.
-- **Tenant Context Protection:** Frontends cannot provide raw `organization_id` UUIDs to authenticate or query data. All tenant scoping is derived securely on the server via `organization_code` pre-resolution.
-- **Zero Committed Secrets:** All credential values in `.env.example` are placeholders. Real keys must never be committed.
+## Security Safeguards
+- **Zero Committed Secrets:** `.env`, `.env.*`, and `.vercel/` are strictly excluded via `.gitignore`.
+- **No Trust in Client Telemetry:** GPS distance, geofence pass/fail, and timestamps are always computed and enforced server-side.
+- **Immutable Audit Trail:** Every attendance submission, Admin approval/rejection, and security action is recorded in `public.audit_logs`.
